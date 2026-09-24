@@ -1,0 +1,333 @@
+---
+title: "Modelo Lotka-Volterra aplicado al control biológico"
+author: "Dra.Aline Pingarroni"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-location: left
+    code-fold: show
+    code-tools: true
+    number-sections: true
+    theme: flatly
+    df-print: paged
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: setup
+# install.packages("deSolve")
+# install.packages("reshape2")
+library(deSolve)
+library(ggplot2)
+library(reshape2)
+```
+
+# Objetivo
+
+Explorar la dinámica depredador-presa mediante el modelo Lotka-Volterra y analizar cómo las características de una plaga y de su agente de control biológico pueden modificar los resultados de una interacción utilizada como modelo simplificado de control biológico.
+
+# Situación de estudio
+
+Consideremos una población de insectos herbívoros que funciona como **presa** y una población de depredadores que puede funcionar como **agente de control biológico**. El modelo Lotka-Volterra permite explorar cómo ambas poblaciones cambian a través del tiempo como resultado de su interacción.
+
+En su formulación ecológica, el modelo describe una interacción **presa-depredador**. En este ejercicio lo utilizaremos como una representación simplificada del control biológico: la **presa** representa una especie plaga y el **depredador** representa un **agente de control biológico**. Por esta razón, en las ecuaciones conservaremos los términos presa y depredador, mientras que al interpretar los resultados utilizaremos su aplicación al manejo de plagas.
+
+Las ecuaciones son:
+
+$$
+\frac{dN}{dt}=rN-aNP
+$$
+
+$$
+\frac{dP}{dt}=bNP-mP
+$$
+
+donde:
+
+- $N$ es la población de presas, que en este ejercicio representa la plaga.
+- $P$ es la población de depredadores, que en la aplicación de este ejercicio representa al agente de control biológico.
+- $r$ es la tasa de crecimiento de la presa.
+- $a$ representa la intensidad con la que el depredador consume a la presa.
+- $b$ representa la contribución del consumo de presas al crecimiento del depredador.
+- $m$ es la tasa de mortalidad del depredador.
+
+# 1. Definir los parámetros
+
+```{r}
+r <- 0.5
+a <- 0.02
+b <- 0.01
+m <- 0.1
+```
+
+# 2. Definir el sistema de ecuaciones
+
+Una función en R es un bloque de código que realiza una tarea específica. La función recibe tres elementos:
+
+- `t`: tiempo.
+- `state`: poblaciones de presas (`N`) y depredadores (`P`).
+- `parameters`: parámetros `r`, `a`, `b` y `m`.
+
+```{r}
+lotka_volterra <- function(t, state, parameters) {
+  N <- state[1]
+  P <- state[2]
+
+  with(as.list(parameters), {
+    dN <- r * N - a * N * P
+    dP <- b * N * P - m * P
+    return(list(c(dN, dP)))
+  })
+}
+```
+
+# 3. Condiciones iniciales
+
+```{r}
+state <- c(N = 40, P = 9)
+```
+
+En el tiempo inicial tenemos 40 individuos de la plaga y 9 depredadores que actúan como agentes de control biológico.
+
+# 4. Tiempo de simulación
+
+```{r}
+time <- seq(0, 200, by = 1)
+```
+
+# 5. Resolver el modelo
+
+```{r}
+parameters <- c(r = r, a = a, b = b, m = m)
+
+out <- ode(
+  y = state,
+  times = time,
+  func = lotka_volterra,
+  parms = parameters
+)
+
+out <- as.data.frame(out)
+```
+
+# 6. Graficar las poblaciones
+
+```{r}
+out_long <- melt(
+  out,
+  id.vars = "time",
+  variable.name = "Poblacion",
+  value.name = "Tamano"
+)
+```
+
+```{r}
+ggplot(out_long, aes(x = time, y = Tamano, color = Poblacion)) +
+  geom_line(linewidth = 1.1) +
+  labs(
+    title = "Modelo Lotka-Volterra: plaga y agente de control biológico",
+    x = "Tiempo",
+    y = "Tamaño de la población",
+    color = "Población"
+  ) +
+  scale_color_manual(
+    values = c("N" = "#D95F02", "P" = "#1B9E77"),
+    labels = c("Plaga (N)", "Agente de control biológico (P)")
+  ) +
+  theme_linedraw()
+```
+
+## Interpretación inicial
+
+**Pregunta 1.** ¿Las dos poblaciones alcanzan sus valores máximos al mismo tiempo?
+
+**Pregunta 2.** ¿Qué sucede con la población del agente de control biológico después de que aumenta la población de la plaga?
+
+**Pregunta 3.** ¿Qué sucede posteriormente con la plaga cuando aumenta la abundancia del agente de control biológico?
+
+**Pregunta 4.** Explica con tus palabras por qué las dos poblaciones presentan oscilaciones.
+
+# 7. Función para comparar escenarios
+
+Crearemos una función que permita modificar las condiciones iniciales y los parámetros del modelo.
+
+```{r}
+simular_lv <- function(N0 = 40, P0 = 9,
+                       r = 0.5, a = 0.02,
+                       b = 0.01, m = 0.1,
+                       tiempo = 200) {
+
+  state <- c(N = N0, P = P0)
+  parameters <- c(r = r, a = a, b = b, m = m)
+  times <- seq(0, tiempo, by = 1)
+
+  resultado <- ode(
+    y = state,
+    times = times,
+    func = lotka_volterra,
+    parms = parameters
+  )
+
+  as.data.frame(resultado)
+}
+```
+
+También usaremos una función sencilla para graficar cada escenario.
+
+```{r}
+graficar_lv <- function(datos, titulo) {
+  datos_long <- melt(
+    datos,
+    id.vars = "time",
+    variable.name = "Poblacion",
+    value.name = "Tamano"
+  )
+
+  ggplot(datos_long, aes(time, Tamano, color = Poblacion)) +
+    geom_line(linewidth = 1.1) +
+    labs(
+      title = titulo,
+      x = "Tiempo",
+      y = "Tamaño de la población",
+      color = "Población"
+    ) +
+    scale_color_manual(
+      values = c("N" = "#D95F02", "P" = "#1B9E77"),
+      labels = c("Plaga (N)", "Agente de control biológico (P)")
+    ) +
+    theme_linedraw()
+}
+```
+
+# 8. Exploración del control biológico
+
+En cada escenario deberán:
+
+1. Formular una predicción antes de ejecutar el código.
+2. Modificar únicamente la variable indicada.
+3. Observar el resultado.
+4. Compararlo con el escenario original.
+5. Proponer una explicación ecológica.
+
+## Escenario A. Mayor abundancia inicial del agente de control biológico
+
+En el modelo original comenzamos con 9 depredadores que representan al agente de control biológico. Ahora iniciaremos con 20.
+
+**Predicción.** ¿Qué esperas que ocurra con la plaga al aumentar $P_0$? ¿Esperas que desaparezca?
+
+```{r}
+escenario_A <- simular_lv(P0 = 20)
+graficar_lv(escenario_A, "Escenario A: mayor abundancia inicial del agente de control biológico")
+```
+
+**Pregunta 5.** ¿Aumentar el número inicial de agentes de control biológico eliminó a la plaga? Describe los cambios que observaste en las dos poblaciones.
+
+## Escenario B. Mayor intensidad de consumo
+
+En el escenario original $a=0.02$. Ahora prueba con $a=0.04$.
+
+**Predicción.** ¿Cómo esperas que una mayor intensidad de consumo modifique la abundancia de la plaga y del agente de control biológico?
+
+```{r}
+escenario_B <- simular_lv(a = 0.04)
+graficar_lv(escenario_B, "Escenario B: mayor intensidad de consumo")
+```
+
+**Pregunta 6.** ¿Cómo cambió la amplitud o el momento de las oscilaciones respecto al escenario original?
+
+## Escenario C. Mayor mortalidad del agente de control biológico
+
+Ahora cambia la mortalidad del depredador de $m=0.1$ a $m=0.2$.
+
+**Predicción.** ¿Qué consecuencias esperas para la plaga si el agente de control biológico presenta una mayor mortalidad?
+
+```{r}
+escenario_C <- simular_lv(m = 0.2)
+graficar_lv(escenario_C, "Escenario C: mayor mortalidad del agente de control biológico")
+```
+
+**Pregunta 7.** ¿Cómo respondió la población de la plaga? ¿Qué implicaciones podría tener esto para un programa de control biológico?
+
+## Escenario D. Mayor crecimiento de la plaga
+
+Cambia la tasa de crecimiento de la presa de $r=0.5$ a $r=0.8$.
+
+**Predicción.** ¿El mismo agente de control biológico tendrá el mismo efecto sobre una plaga que crece más rápidamente?
+
+```{r}
+escenario_D <- simular_lv(r = 0.8)
+graficar_lv(escenario_D, "Escenario D: mayor tasa de crecimiento de la plaga")
+```
+
+**Pregunta 8.** Compara este escenario con el original. ¿Cómo cambió la dinámica de ambas poblaciones?
+
+# 9. Reto de control biológico
+
+Modifiquen **uno o dos parámetros** del modelo para proponer un escenario en el que el agente de control biológico reduzca de manera importante la abundancia máxima de la plaga respecto al escenario original.
+
+Antes de ejecutar el modelo, indiquen:
+
+- Parámetro o parámetros que modificarán.
+- Valores propuestos.
+- Predicción de lo que ocurrirá con la plaga.
+- Predicción de lo que ocurrirá con el agente de control biológico.
+
+```{r}
+# Modifiquen los valores que consideren necesarios
+N0_reto <- 40
+P0_reto <- 9
+r_reto <- 0.5
+a_reto <- 0.02
+b_reto <- 0.01
+m_reto <- 0.1
+
+reto <- simular_lv(
+  N0 = N0_reto,
+  P0 = P0_reto,
+  r = r_reto,
+  a = a_reto,
+  b = b_reto,
+  m = m_reto
+)
+
+graficar_lv(reto, "Reto de control biológico")
+```
+
+Comparen el máximo de la plaga en el escenario original y en su propuesta.
+
+```{r}
+max(out$N)
+max(reto$N)
+```
+
+**Pregunta 9.** ¿Su modificación redujo la abundancia máxima de la plaga? ¿Qué costo o limitación ecológica podría tener la estrategia propuesta?
+
+# 10. Un supuesto importante del modelo
+
+En el modelo Lotka-Volterra clásico, la presa sigue la ecuación:
+
+$$
+\frac{dN}{dt}=rN-aNP
+$$
+
+Si no hubiera depredadores ($P=0$), la ecuación quedaría:
+
+$$
+\frac{dN}{dt}=rN
+$$
+
+**Pregunta 10.** ¿Qué tipo de crecimiento tendría la plaga en ausencia del agente de control biológico?
+
+**Pregunta 11.** Considerando lo aprendido en el ejercicio de crecimiento logístico, ¿qué elemento de la dinámica poblacional no está incorporado en esta ecuación?
+
+# 11. Preguntas de cierre
+
+1. ¿Por qué aumentar la cantidad de agentes de control biológico no necesariamente implica eliminar a la plaga?
+2. ¿Qué características de un agente de control biológico podrían favorecer su capacidad para regular una plaga?
+3. ¿Cómo puede afectar una alta mortalidad del agente de control biológico al control biológico?
+4. ¿Qué simplificaciones del modelo Lotka-Volterra dificultan representar un sistema real de control de plagas?
+5. ¿Qué información adicional necesitaríamos para evaluar si un agente de control biológico es adecuado para un programa de control biológico?
